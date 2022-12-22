@@ -7,6 +7,7 @@
 # It expects the following folder structure:            #
 # <start_dir>/<author/artist>[/<series>]/<album/title>/ #
 # It outputs a CSV-formatted data.                      #
+# Requires "tone" and "ffprobe"                         #
 #########################################################
 
 # function to check single folder
@@ -50,12 +51,12 @@ check_audio_meta () {
 	    fi
 	  fi
 	  # extract audio metadata and check if the author matches
+	  # metadata needs to be sanitized for CSV because it may contain double-quotes, so convert them to backticks
 	  author_matches_meta=1
 	  files=$(find "$dir" -maxdepth 1 -type f -exec file "{}" \; | grep -E '\s(Audio|MP4|ASF)' | cut -d ':' -f 1,1)
 	  file=$(echo "$files" | head -1)
-	  meta_artist=$(ffprobe -loglevel error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$file" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-	  meta_album=$(ffprobe -loglevel error -show_entries format_tags=album -of default=noprint_wrappers=1:nokey=1 "$file" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-	  # comment needs to be sanitized because it may contain double-quotes, so convert them to backticks
+	  meta_artist=$(ffprobe -loglevel error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$file" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr '"' '`')
+	  meta_album=$(ffprobe -loglevel error -show_entries format_tags=album -of default=noprint_wrappers=1:nokey=1 "$file" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr '"' '`')
 	  meta_comment=$(ffprobe -loglevel error -show_entries format_tags=comment -of default=noprint_wrappers=1:nokey=1 "$file" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tr '"' '`')
 	  if [[ "$meta_artist" != "$author" ]]; then
 	    author_matches_meta=0
