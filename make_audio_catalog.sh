@@ -10,30 +10,116 @@
 # Requires "tone" and "ffprobe"                         #
 #########################################################
 
+# function to extract cover image from an audio file
+extract_cover() {
+	file="$*"
+	if [ "x$file" == "x" ]; then
+	  echo Need file name
+	  return 0
+	fi
+	codec=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=s=,:p=0 -sexagesimal "$file")
+	case "$codec" in 
+	  "mjpeg")
+	    ext="jpg"
+	    ;;
+	  "png")
+	    ext="png"
+	    ;;
+	   *)
+	    ext="img"
+	    return 0
+	    ;;
+	esac
+	ffmpeg -i "$file" -an -c:v copy cover.$ext 
+  return 1
+}
+
+# function to check files for an embedded cover
+check_embedded_cover() {
+	if [ -z "$*" ]; then
+	  echo Need directory name
+	  return 1
+	else 
+	  dir="$*"
+	fi
+	# find all audio files
+	file * | grep Audio | head -1 | cut -d ':' -f1,1 | while read -r filename; do
+	  has_embedded=$(tone dump "$filename" | grep 'embedded pictures' | wc -l)
+	  if [[ $has_embedded -gt 0 ]]; then
+	    extract_cover "$filename" 
+	    if  [[ $? -gt 0 ]]; then 
+	      return 1
+	    fi
+	  fi
+	done
+	# nothing extracted
+	return 0
+}
+
+# function to check for a cover image in specific folder
+check_cover() {
+	if [ -z "$*" ]; then
+	  echo Need directory name
+	  return 0
+	else 
+	  dir="$*"
+	fi
+	# Booksonic expects album cover in "cover.jpg" or "cover.png"
+	cd "$dir"
+	cover="$(ls cover.* | head -1)"
+	# check if the file is an image
+	is_image=$(file "$cover" | grep -w image | wc -l)
+	if [[ $is_image -gt 0 ]]; then
+	  return 1
+	fi
+	# if any of the audio files have embedded cover art, extract it
+	check_embedded_cover "$dir"
+	if  [[ $? -gt 0 ]]; then 
+	  return 1
+	fi
+	# try to find cover image with a different name
+	alt_cover=$(ls *[Cc]over* | grep -wi cover | head -1)
+	# check if the file is an image
+	is_image="$(file "alt_$cover" | grep -w image | wc -l)"
+	if [[ $is_image -gt 0 ]]; then
+	  # copy the file to cover.<ext>
+	  ext="${alt_cover##*.}"
+	  cp "$alt_cover" "cover.$ext"
+	  return 1
+	fi
+	# check for any image files
+	image=$(find "$dir" -maxdepth 1 -type f \( -name '*.jpg' -o -name '*.png' \) -print | head -1)
+	# hopefully it's a cover image, fingers crossed!
+	is_image=$(file "$image" | grep -w image | wc -l)
+	if [[ $is_image -gt 0 ]]; then
+	  # copy the file to cover.<ext>
+	  ext="${image##*.}"
+	  cp "$image" "cover.$ext"
+	  return 1
+	fi
+	#not found
+	return 0
+}
+
 # function to check single folder
 check_audio_meta () {
 	if [ -z "$*" ]; then
 	  echo Need directory name
-	  exit
+	  return 1
 	else 
 	  dir="$*"
 	fi
 	# do not show stderr
 	exec 2> /dev/null
 	# check if the folder has files in it
-	has_files=$(find "$dir" -maxdepth 1 \( ! -name 'desc.txt' -and ! -name 'cover.*' \) -type f -printf '.')
-	if [[ "x$has_files" != "x" ]]; then
+	has_files=$(find "$dir" -maxdepth 1 -type f \( ! -name 'desc.txt' -and ! -name 'cover.*' \) -type f -print | wc -l )
+	if [[ $has_files -gt 0 ]]; then
 	  # Booksonic expects album cover in "cover.jpg" or "cover.png"
-	  has_cover=$(ls -l "$dir" | grep cover. | wc -l)
+	  has_cover=check_cover "$dir"
 	  # Booksonic expects album description in "desc.txt"
-	  has_desc=$(ls -l "$dir" | grep desc.txt | wc -l)
-	  # check if any of the audio files have embedded cover art
-	  embedded=$(tone dump "$dir" | grep 'embedded pictures' | wc -l) 
-	  if [[ $embedded -gt 0 ]]; then
-	    embedded_cover=1
-	  else
-	    embedded_cover=0
-	  fi
+	  has_desc=$(find "$dir" -maxdepth 1 -type f -name 'desc.txt' -print | wc -l)
+	  # Booksonic expects narrator in "reader.txt"
+	  has_reader=$(find "$dir" -maxdepth 1 -type f -name 'reader.txt' -print | wc -l)
 	  # parse author, series and title from the directory structure
 	  author="$(echo $dir | cut -d '/' -f 5,5)"
 	  part1="$(echo $dir | cut -d '/' -f 6,6)"
@@ -63,9 +149,11 @@ check_audio_meta () {
 	    author_matches_meta=0
 	  fi
 	  # output the result as CSV data line
-	  echo '"'$dir'","'$author'","'$meta_artist'","'$series'","'$title'","'$meta_album'","'$meta_comment'",'$embedded_cover','$has_desc','$has_cover','$author_matches_meta
+	  echo '"'$dir'","'$author'","'$meta_artist'","'$series'","'$title'","'$meta_album'","'$meta_comment'",'$author_matches_meta','$has_cover','$has_desc','$has_reader
 	fi
+	return 0
 }
+
 # main program starts here
 export -f check_audio_meta
 if [ -z "$*" ]; then
@@ -75,6 +163,6 @@ else
   start_dir="$*"
 fi
 # print header
-echo '"path","author","meta_artist","series","title","meta_album","meta_comment","embedded_cover","has_desc","has_cover","author_matches_meta"'
+echo '"path","author","meta_artist","series","title","meta_album","meta_comment","author_matches_meta","embedded_cover","has_images","has_cover","has_desc","has_reader"'
 # find all directories and check them
 find "$start_dir" -type d -exec bash -c 'check_audio_meta "$0"' "{}" \; 
