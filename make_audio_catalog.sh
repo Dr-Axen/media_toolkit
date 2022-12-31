@@ -166,6 +166,7 @@ check_audio_meta () {
 # main program starts here
 ########################################################################
 export -f check_audio_meta
+export -f check_cover 
 # set initial parameter values
 start_dir="."
 output="audio_catalog.csv"
