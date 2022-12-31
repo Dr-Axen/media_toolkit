@@ -157,6 +157,7 @@ check_audio_meta () {
 	  fi
 	  echo "Found '"$dir"' with the following metadata artist='"$meta_artist"', album='"$meta_album"', comment='"$meta_comment"'"
 	  echo "Has cover: ["$has_cover"], Has desc: ["$has_desc"], Has reader: ["$has_reader"]"
+	  echo "---"
 	  # output the result as CSV data line
 	  echo '"'$dir'","'$author'","'$meta_artist'","'$series'","'$title'","'$meta_album'","'$meta_comment'",'$author_matches_meta','$has_cover','$has_desc','$has_reader >> "$output"
 	fi
