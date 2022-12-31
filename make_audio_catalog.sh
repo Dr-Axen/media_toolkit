@@ -121,7 +121,8 @@ check_audio_meta () {
 	if [[ $has_files -gt 0 ]]; then
 	  echo "Analyzing '"$dir"'"
 	  # Booksonic expects album cover in "cover.jpg" or "cover.png"
-	  has_cover=check_cover "$dir"
+	  $check_cover "$dir"
+	  has_cover=$?
 	  # Booksonic expects album description in "desc.txt"
 	  has_desc=$(find "$dir" -maxdepth 1 -type f -name 'desc.txt' -print | wc -l)
 	  # Booksonic expects narrator in "reader.txt"
