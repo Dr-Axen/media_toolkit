@@ -55,7 +55,7 @@ vidinfo () {
       movie_folder=${path_normalized##*/}
 	  echo '"'$filepath'","'$filename'","'$library'","'$movie_folder'","'$codec_name'","'$codec_tag_string'","'$width'","'$height'","'$display_aspect_ratio'","'$duration'","'$size'","'$size_bytes'","'$title'","'$originaltitle'","'$year'","'$runtime'","'$imdbid'","'$tmdbid'","'$country'"'
 	  # do not stress the disk too much
-	  sleep 1
+	  #sleep 1
 	fi
 }
 

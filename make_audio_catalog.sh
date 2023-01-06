@@ -33,8 +33,8 @@ extract_cover() {
 	    ;;
 	esac
 	ffmpeg -i "$file" -an -c:v copy cover.$ext
-	echo "Extracted '"$ext"' image" 
-  return 1
+	echo "Extracted '"$ext"' image" >&2
+    return 1
 }
 
 # function to check files for an embedded cover
@@ -49,7 +49,9 @@ check_embedded_cover() {
 	  has_embedded=$(tone dump "$filename" | grep 'embedded pictures' | wc -l)
 	  if [[ $has_embedded -gt 0 ]]; then
 	    extract_cover "$filename" 
-	    if  [[ $? -gt 0 ]]; then 
+	    status=$*
+	    echo "extract_cover returned $status" >&2
+	    if  [[ $status -gt 0 ]]; then 
 	      return 1
 	    fi
 	  fi
@@ -66,67 +68,78 @@ check_cover() {
 	  dir="$*"
 	fi
 	# Booksonic expects album cover in "cover.jpg" or "cover.png"
+	echo "1) Checking for file named 'cover.*'" >&2
 	cd "$dir"
-	cover="$(ls cover.* | head -1)"
+	cover="$(find "$dir" -maxdepth 1 -type f -name 'cover.*' -print | head -1)"
 	# check if the file is an image
 	is_image=$(file "$cover" | grep -w image | wc -l)
 	if [[ $is_image -gt 0 ]]; then
-	  echo "Cover file exists"
+	  echo "Cover file exists" >&2
 	  return 1
 	fi
 	# if any of the audio files have embedded cover art, extract it
+	echo "2) Checking for embeddd cover" >&2
 	check_embedded_cover "$dir"
+    status=$*
+    echo "check_embedded_cover returned $status" >&2
+	# why below does not work? check "$?", perhaps return value is wrong
 	if  [[ $? -gt 0 ]]; then 
-	  echo "Embedded cover exists"
+	  echo "Embedded cover exists" >&2
 	  return 1
 	fi
 	# try to find cover image with a different name
+	echo "3) Checking for file named '*[Cc]over*.*'" >&2
 	alt_cover=$(ls *[Cc]over* | grep -wi cover | head -1)
 	# check if the file is an image
 	is_image="$(file "alt_$cover" | grep -w image | wc -l)"
 	if [[ $is_image -gt 0 ]]; then
-	  echo "Found alernate cover file"
+	  echo "Found alernate cover file" >&2
 	  # copy the file to cover.<ext>
 	  ext="${alt_cover##*.}"
 	  cp "$alt_cover" "cover.$ext"
 	  return 1
 	fi
 	# check for any image files
-	image=$(find "$dir" -maxdepth 1 -type f \( -name '*.jpg' -o -name '*.png' \) -print | head -1)
+	echo "4) Checking for any images files" >&2
+	image=$(find "$dir" -maxdepth 1 -type f \( -name '*.jpg' -o -name '*.png' \) \! -size 0 -print | head -1)
 	# hopefully it's a cover image, fingers crossed!
 	is_image=$(file "$image" | grep -w image | wc -l)
 	if [[ $is_image -gt 0 ]]; then
-	  echo "Found image file, fingers crossed"
+	  echo "Found image file, fingers crossed" >&2
 	  # copy the file to cover.<ext>
 	  ext="${image##*.}"
 	  cp "$image" "cover.$ext"
 	  return 1
 	fi
 	#not found
+	echo "5) Cover not found." >&2
 	return 0
 }
 
 # function to check single folder
 check_audio_meta () {
 	if [ -z "$*" ]; then
-	  echo Need directory name
 	  return 0
 	else 
 	  dir="$*"
 	fi
-	# do not show stderr
-	exec 2> /dev/null
 	# check if the folder has files in it, besides just cover and description
-	has_files=$(find "$dir" -maxdepth 1 -type f \( ! -name 'desc.txt' -and ! -name 'cover.*' \) -type f -print | wc -l )
+	has_files=$(find "$dir" -maxdepth 1 -type f \( ! -name 'desc.txt' -and ! -name 'cover.*' \) \! -size 0 -type f -print | wc -l )
 	if [[ $has_files -gt 0 ]]; then
-	  echo "Analyzing '"$dir"'"
+	  echo "---" >&2
+	  echo "Analyzing '"$dir"'" >&2
 	  # Booksonic expects album cover in "cover.jpg" or "cover.png"
 	  check_cover "$dir"
 	  has_cover=$?
 	  # Booksonic expects album description in "desc.txt"
-	  has_desc=$(find "$dir" -maxdepth 1 -type f -name 'desc.txt' -print | wc -l)
+	  has_desc=$(find "$dir" -maxdepth 1 -type f -name 'desc.txt' \! -size 0 -print | wc -l)
+	  # see if there are other text files there
+	  has_txt=$(find "$dir" -maxdepth 1 -type f \( -name '*.txt' -o -name '*.nfo' \) \( \! -name 'desc.txt' -a \! -name 'reader.txt' \) \! -size 0 -print | wc -l)	  
+	  if [[ $has_txt -gt 0 ]]; then
+	    echo "$dir has other text files" >&2
+	  fi
 	  # Booksonic expects narrator in "reader.txt"
-	  has_reader=$(find "$dir" -maxdepth 1 -type f -name 'reader.txt' -print | wc -l)
+	  has_reader=$(find "$dir" -maxdepth 1 -type f -name 'reader.txt' \! -size 0 -print | wc -l)
 	  # parse author, series and title from the directory structure
 	  author="$(echo $dir | cut -d '/' -f 5,5)"
 	  part1="$(echo $dir | cut -d '/' -f 6,6)"
@@ -155,30 +168,25 @@ check_audio_meta () {
 	  if [[ "$meta_artist" != "$author" ]]; then
 	    author_matches_meta=0
 	  fi
-	  echo "Found '"$dir"' with the following metadata artist='"$meta_artist"', album='"$meta_album"', comment='"$meta_comment"'"
-	  echo "Has cover: ["$has_cover"], Has desc: ["$has_desc"], Has reader: ["$has_reader"]"
-	  echo "---"
+	  echo "Found '"$dir"' with the following metadata artist='"$meta_artist"', album='"$meta_album"', comment='"$meta_comment"'" >&2
+	  echo "Has cover: ["$has_cover"], Has desc: ["$has_desc"], Has reader: ["$has_reader"]" >&2
+	  path=$(echo $dir | sed "s%$start_dir%%")
 	  # output the result as CSV data line
-	  echo '"'$dir'","'$author'","'$meta_artist'","'$series'","'$title'","'$meta_album'","'$meta_comment'",'$author_matches_meta','$has_cover','$has_desc','$has_reader >> "$output"
+	  echo '"'$start_dir'","'$path'","'$author'","'$meta_artist'","'$series'","'$title'","'$meta_album'","'$meta_comment'",'$author_matches_meta','$has_cover','$has_desc','$has_reader','$has_txt
 	fi
 	return 1
 }
 ########################################################################
 # main program starts here
 ########################################################################
-export -f check_audio_meta
-export -f check_cover 
+export -f check_audio_meta check_cover check_embedded_cover extract_cover
 # set initial parameter values
 start_dir="."
-output="audio_catalog.csv"
 # read parameters
 while getopts ":d:o:" opt; do
   case $opt in
     d)
       start_dir="$OPTARG"
-      ;;
-    o)
-      output="$OPTARG"
       ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -190,8 +198,9 @@ while getopts ":d:o:" opt; do
       ;;
   esac
 done
-echo "Starting program in '"$start_dir"', output file is '"$output"'"
+export start_dir
+echo "Starting program in '"$start_dir"'" >&2
 # print header
-echo '"path","author","meta_artist","series","title","meta_album","meta_comment","author_matches_meta","embedded_cover","has_images","has_cover","has_desc","has_reader"' > "$output"
+echo '"library folder","path","author","meta_artist","series","title","meta_album","meta_comment","author_matches_meta","has_cover","has_desc","has_reader","has_text"'
 # find all directories and check them
 find "$start_dir" -type d -exec bash -c 'check_audio_meta "$0"' "{}" \; 
