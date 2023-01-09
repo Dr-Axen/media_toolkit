@@ -172,7 +172,7 @@ check_audio_meta () {
 	  echo "Has cover: ["$has_cover"], Has desc: ["$has_desc"], Has reader: ["$has_reader"]" >&2
 	  path=$(echo $dir | sed "s%$start_dir%%")
 	  # output the result as CSV data line
-	  echo '"'$start_dir'","'$path'","'$author'","'$meta_artist'","'$series'","'$title'","'$meta_album'","'$meta_comment'",'$author_matches_meta','$has_cover','$has_desc','$has_reader','$has_txt
+	  echo '"'$start_dir'","'$path'","'$author'","'$meta_artist'","'$series'","'$title'","'$meta_album'","'$meta_comment'",'$author_matches_meta','$has_cover','$has_desc','$has_reader','$has_txt >>$output
 	fi
 	return 1
 }
@@ -182,11 +182,15 @@ check_audio_meta () {
 export -f check_audio_meta check_cover check_embedded_cover extract_cover
 # set initial parameter values
 start_dir="."
+current_dir="$PWD"
 # read parameters
 while getopts ":d:o:" opt; do
   case $opt in
     d)
       start_dir="$OPTARG"
+      ;;
+    o)
+      output="$OPTARG"
       ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -198,9 +202,20 @@ while getopts ":d:o:" opt; do
       ;;
   esac
 done
+# check if the output file is a path
+# if not, append to PWD value
+if [ -z "$output" ]; then
+  output="&1"
+else 
+  output_is_path=$(echo $output | grep -F '/' | wc -l)
+  if [[ $output_is_path -eq 0 ]]; then
+    output="$(echo ${current_dir}/$output)"
+  fi
+fi
 export start_dir
+export output
 echo "Starting program in '"$start_dir"'" >&2
 # print header
-echo '"library folder","path","author","meta_artist","series","title","meta_album","meta_comment","author_matches_meta","has_cover","has_desc","has_reader","has_text"'
+echo '"library folder","path","author","meta_artist","series","title","meta_album","meta_comment","author_matches_meta","has_cover","has_desc","has_reader","has_text"' >$output
 # find all directories and check them
 find "$start_dir" -type d -exec bash -c 'check_audio_meta "$0"' "{}" \; 
