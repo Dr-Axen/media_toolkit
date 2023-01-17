@@ -38,9 +38,29 @@ vidinfo () {
 	  display_aspect_ratio=$(echo $info | cut -d',' -f 5,5)
 	  duration=$(echo $info | cut -d',' -f 6,6)
 	  # get embedded subtitle info
-	  subs=$(ffprobe -v error -select_streams s -show_entries stream_tags=language -of csv=p=0 "$file" | sort | uniq | tr '\n' ' ')
+	  subs=$(ffprobe -v error -select_streams s -show_entries stream_tags=language -of csv=p=0 "$file" | sort | uniq | tr '\n' ' ' | sed 's/ *$//g')
 	  # check for subtilte files
-	  subfiles=$(find ${path} -type f \( -name '*.sub' -o -name '*.srt' -o -name '*.ssa' -o -name '*.ass' -o -name '*.smi' -o -name '*.psb' -o -name '*.usf' -o -name '*.ssf' \) -print | sed 's%./%%')
+	  # we need to wrap while and the final echo in a subshell otherwise we are losing ext_subs value
+  	  ext_subs=$(find "$path" -type f \( -name '*.sub' -o -name '*.srt' -o -name '*.ssa' -o -name '*.ass' -o -name '*.smi' -o -name '*.psb' -o -name '*.usf' -o -name '*.ssf' \) -print | grep "$name" | (while read sub_file; do
+        sub_filepart=$(basename "$sub_file")
+	    sub_name="${sub_filepart%.*}"
+	    lang="${sub_name##*.}"
+		lang_len=${#lang}
+        if [[ ${#lang} -eq 2 || ${#lang} -eq 3 ]]; then
+		  if [[ -z ${ext_subs} ]]; then
+            ext_subs="$lang"
+		  else 
+            ext_subs="$ext_subs $lang"
+		  fi
+	    else
+          if [[ -z ${ext_subs} ]]; then
+            ext_subs="def"
+		  else 
+            ext_subs="$ext_subs def"
+		  fi
+	    fi
+	  done 
+	  echo $ext_subs | tr ' ' '\n' | sort | uniq | tr '\n' ' ' | sed 's/ *$//g'))
       # check NFO
 	  # replace double quotes with double primes (looks similar, avoids CSV problems)
 	  if [[ -r "$nfo" ]]; then
@@ -57,7 +77,7 @@ vidinfo () {
 	  filename=$(echo $filepart | tr '"' '″')
       library=$(echo $path_normalized | cut -d '/' -f 1,1)
       movie_folder=${path_normalized##*/}
-	  echo '"'$filepath'","'$filename'","'$library'","'$movie_folder'","'$codec_name'","'$codec_tag_string'","'$width'","'$height'","'$display_aspect_ratio'","'$duration'","'$size'","'$size_bytes'","'$title'","'$originaltitle'","'$year'","'$runtime'","'$imdbid'","'$tmdbid'","'$country'","'$subs'","'$subfiles'"'
+	  echo '"'$filepath'","'$filename'","'$library'","'$movie_folder'","'$codec_name'","'$codec_tag_string'","'$width'","'$height'","'$display_aspect_ratio'","'$duration'","'$size'","'$size_bytes'","'$title'","'$originaltitle'","'$year'","'$runtime'","'$imdbid'","'$tmdbid'","'$country'","'$subs'","'$ext_subs'"'
 	  # do not stress the disk too much
 	  #sleep 1
 	fi
