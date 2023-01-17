@@ -37,6 +37,10 @@ vidinfo () {
 	  height=$(echo $info | cut -d',' -f 4,4)
 	  display_aspect_ratio=$(echo $info | cut -d',' -f 5,5)
 	  duration=$(echo $info | cut -d',' -f 6,6)
+	  # get embedded subtitle info
+	  subs=$(ffprobe -v error -select_streams s -show_entries stream_tags=language -of csv=p=0 "$file" | sort | uniq | tr '\n' ' ')
+	  # check for subtilte files
+	  subfiles=$(find ${path} -type f \( -name '*.sub' -o -name '*.srt' -o -name '*.ssa' -o -name '*.ass' -o -name '*.smi' -o -name '*.psb' -o -name '*.usf' -o -name '*.ssf' \) -print | sed 's%./%%')
       # check NFO
 	  # replace double quotes with double primes (looks similar, avoids CSV problems)
 	  if [[ -r "$nfo" ]]; then
@@ -53,7 +57,7 @@ vidinfo () {
 	  filename=$(echo $filepart | tr '"' '″')
       library=$(echo $path_normalized | cut -d '/' -f 1,1)
       movie_folder=${path_normalized##*/}
-	  echo '"'$filepath'","'$filename'","'$library'","'$movie_folder'","'$codec_name'","'$codec_tag_string'","'$width'","'$height'","'$display_aspect_ratio'","'$duration'","'$size'","'$size_bytes'","'$title'","'$originaltitle'","'$year'","'$runtime'","'$imdbid'","'$tmdbid'","'$country'"'
+	  echo '"'$filepath'","'$filename'","'$library'","'$movie_folder'","'$codec_name'","'$codec_tag_string'","'$width'","'$height'","'$display_aspect_ratio'","'$duration'","'$size'","'$size_bytes'","'$title'","'$originaltitle'","'$year'","'$runtime'","'$imdbid'","'$tmdbid'","'$country'","'$subs'","'$subfiles'"'
 	  # do not stress the disk too much
 	  #sleep 1
 	fi
@@ -75,6 +79,6 @@ else
 fi
 export start_dir
 # print header
-echo '"path","name","library","movie_folder","codec_name","codec_tag","width","height","aspect_ratio","duration","size","size_bytes","title","originaltitle","year","runtime","imdbid","tmdbid","country"'
+echo '"path","name","library","movie_folder","codec_name","codec_tag","width","height","aspect_ratio","duration","size","size_bytes","title","originaltitle","year","runtime","imdbid","tmdbid","country","embedded_subs","sub_files"'
 # find all directories and check them
 find "$start_dir" -type f -exec bash -c 'vidinfo "$0"' "{}" \; 
